@@ -1,67 +1,43 @@
-export default async (req, context) => {
-  const url = new URL(req.url);
-  const uid = (url.searchParams.get("uid") || "").trim();
-  const apiKey = req.headers.get("x-api-key");
+const { uid: getUidData } = require('free-fire-apis');
 
-  // আপনার 3টা API key (client দের এখান থেকে একটা করে দিবেন)
-  const VALID_KEYS = {
-    "key_client1_9x7a2b": "client_1",
-    "key_client2_4m8k1p": "client_2",
-    "key_client3_7z2q9w": "client_3",
-  };
+const VALID_KEYS = {
+  "ffk_7hT9mQx2LpR4vK1nZ8s": "client_1",
+  "ffk_3wD6yB9jF2gN5cX0rM7": "client_2",
+  "ffk_9qA1sE4tH7uJ3kL6oP2": "client_3",
+};
 
-  const jsonResponse = (body, status = 200) =>
-    new Response(JSON.stringify(body), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    });
+exports.handler = async (event) => {
+  const uid = (event.queryStringParameters?.uid || "").trim();
+  const apiKey = event.headers["x-api-key"];
 
-  // 1. API key check
+  const jsonResponse = (statusCode, body) => ({
+    statusCode,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
   if (!apiKey || !VALID_KEYS[apiKey]) {
-    return jsonResponse({ error: "Invalid API key" }, 403);
+    return jsonResponse(403, { error: "Invalid API key" });
   }
 
-  // 2. UID validation
   if (!uid || uid.length < 3) {
-    return jsonResponse({ error: "Enter a valid UID" }, 400);
+    return jsonResponse(400, { error: "Enter a valid UID" });
   }
 
-  // 3. External API call
   try {
-    const externalRes = await fetch(
-      `https://api.f9bazar.com/check.php?uid=${encodeURIComponent(uid)}`,
-      { signal: AbortSignal.timeout(10000) }
-    );
+    const data = await getUidData(uid);
 
-    if (!externalRes.ok) {
-      let errData = null;
-      try {
-        errData = await externalRes.json();
-      } catch (_) {}
-
-      if (errData?.error === "ID NOT FOUND") {
-        return jsonResponse({ error: "UID সঠিক নয়" }, 404);
-      }
-      return jsonResponse({ error: "API Error" }, 502);
-    }
-
-    const data = await externalRes.json();
-
-    if (data && data.nickname) {
-      return jsonResponse({
-        uid,
-        nickname: data.nickname,
-        region: data.region || null,
+    if (data && data.Nickname) {
+      return jsonResponse(200, {
+        uid: data.Uid || uid,
+        nickname: data.Nickname,
+        region: data.Region || null,
         client: VALID_KEYS[apiKey],
       });
     } else {
-      return jsonResponse({ error: "No Profile Found" }, 404);
+      return jsonResponse(404, { error: "No Profile Found" });
     }
   } catch (err) {
-    return jsonResponse({ error: "API Error" }, 502);
+    return jsonResponse(502, { error: "API Error", details: err.message });
   }
-};
-
-export const config = {
-  path: "/api/check",
 };
